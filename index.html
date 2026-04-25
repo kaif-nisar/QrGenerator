@@ -8,6 +8,7 @@
   <title>QR Drive File Manager</title>
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%230f172a'/%3E%3Cpath d='M20 10h16a8 8 0 0 1 8 8v28a8 8 0 0 1-8 8H20a8 8 0 0 1-8-8V18a8 8 0 0 1 8-8Z' fill='%23fff' opacity='.12'/%3E%3Crect x='16' y='14' width='14' height='14' rx='3' fill='%23fff'/%3E%3Crect x='20' y='18' width='6' height='6' rx='1' fill='%230f172a'/%3E%3Crect x='34' y='14' width='14' height='14' rx='3' fill='%23fff'/%3E%3Crect x='38' y='18' width='6' height='6' rx='1' fill='%230f172a'/%3E%3Crect x='16' y='34' width='14' height='14' rx='3' fill='%23fff'/%3E%3Crect x='20' y='38' width='6' height='6' rx='1' fill='%230f172a'/%3E%3Cpath d='M36 36h6v6h-6zm8 0h6v6h-6zm-8 8h6v6h-6zm8 0h6v6h-6z' fill='%2338bdf8'/%3E%3C/svg%3E">
   <script defer src="https://accounts.google.com/gsi/client"></script>
+  <script defer src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.min.mjs" type="module"></script>
   <script defer src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
   <style>
     :root {
@@ -703,6 +704,52 @@
       overflow: hidden;
     }
 
+    .pdf-viewer-shell {
+      position: relative;
+      z-index: 1;
+      min-height: 100vh;
+      width: min(980px, calc(100% - 1rem));
+      margin: 0 auto;
+      padding: 1rem 0 2rem;
+    }
+
+    .pdf-viewer-card {
+      background: rgba(255, 255, 255, 0.94);
+      border-radius: 1.4rem;
+      padding: 1rem;
+      box-shadow: 0 28px 60px rgba(15, 23, 42, 0.18);
+    }
+
+    .pdf-viewer-status {
+      display: grid;
+      place-items: center;
+      min-height: 60vh;
+      text-align: center;
+      color: var(--muted);
+      gap: 0.75rem;
+    }
+
+    .pdf-pages {
+      display: grid;
+      gap: 1rem;
+    }
+
+    .pdf-page {
+      display: grid;
+      place-items: center;
+      border-radius: 1rem;
+      overflow: hidden;
+      background: #ffffff;
+      box-shadow: 0 18px 34px rgba(15, 23, 42, 0.12);
+    }
+
+    .pdf-page canvas {
+      display: block;
+      width: 100%;
+      height: auto;
+      background: #ffffff;
+    }
+
     @keyframes spin {
       to { transform: rotate(360deg); }
     }
@@ -766,6 +813,17 @@
   </style>
 </head>
 <body>
+  <section id="pdfViewerApp" class="hidden pdf-viewer-shell">
+    <div class="pdf-viewer-card">
+      <div id="pdfViewerStatus" class="pdf-viewer-status">
+        <div class="loader" aria-hidden="true"></div>
+        <strong>Opening PDF...</strong>
+        <p class="hint">The PDF viewer is loading the uploaded file.</p>
+      </div>
+      <div id="pdfPages" class="hidden pdf-pages"></div>
+    </div>
+  </section>
+
   <main class="app-shell">
     <div class="topbar">
       <div class="brand">
@@ -1103,6 +1161,9 @@
     const toastStack = document.getElementById("toastStack");
     const modalRoot = document.getElementById("modalRoot");
     const qrRawMount = document.getElementById("qrRawMount");
+    const pdfViewerApp = document.getElementById("pdfViewerApp");
+    const pdfViewerStatus = document.getElementById("pdfViewerStatus");
+    const pdfPages = document.getElementById("pdfPages");
 
     // Global app state.
     let tokenClient = null;
@@ -1111,6 +1172,7 @@
     let driveFiles = [];
     let filteredFiles = [];
     let selectedFile = null;
+    let pdfJsModulePromise = null;
     let appState = {
       clientId: "",
       accessToken: "",
@@ -1359,6 +1421,32 @@
       return value.length > maxLength ? `${value.slice(0, maxLength - 1)}…` : value;
     }
 
+    function isPdfFile(file) {
+      return file?.mimeType === "application/pdf";
+    }
+
+    function getBaseAppUrl() {
+      return window.location.href.split("?")[0];
+    }
+
+    function buildDirectDownloadLink(file) {
+      if (file.webContentLink) {
+        return file.webContentLink;
+      }
+
+      const resourceKeyPart = file.resourceKey ? `&resourcekey=${encodeURIComponent(file.resourceKey)}` : "";
+      return `https://www.googleapis.com/drive/v3/files/${file.id}?alt=media${resourceKeyPart}`;
+    }
+
+    function buildPdfViewerLink(file) {
+      const params = new URLSearchParams({
+        mode: "pdf",
+        src: buildDirectDownloadLink(file),
+        name: file.name || "PDF"
+      });
+      return `${getBaseAppUrl()}?${params.toString()}`;
+    }
+
     function applyFilters() {
       const query = searchInput.value.trim().toLowerCase();
       const ageValue = ageFilter.value;
@@ -1511,6 +1599,10 @@
     }
 
     function buildViewerLink(file) {
+      if ((file.mimeType || "") === "application/pdf") {
+        return buildPdfViewerLink(file);
+      }
+
       const resourceKeyPart = file.resourceKey ? `&resourcekey=${encodeURIComponent(file.resourceKey)}` : "";
       if (file.webViewLink) {
         return file.webViewLink;
@@ -1529,6 +1621,7 @@
         resourceKey: file.resourceKey || "",
         webViewLink: file.webViewLink || "",
         webContentLink: file.webContentLink || "",
+        downloadLink: buildDirectDownloadLink(file),
         viewerLink: buildViewerLink(file)
       };
     }
@@ -1841,8 +1934,78 @@
         showToast("Select a file first", "error");
         return;
       }
-      const link = selectedFile.webContentLink || selectedFile.viewerLink;
+      const link = selectedFile.downloadLink || selectedFile.webContentLink || selectedFile.viewerLink;
       window.open(link, "_blank", "noopener,noreferrer");
+    }
+
+    async function getPdfJs() {
+      if (!pdfJsModulePromise) {
+        pdfJsModulePromise = import("https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.min.mjs");
+      }
+      return pdfJsModulePromise;
+    }
+
+    async function renderPdfViewerMode() {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("mode") !== "pdf") {
+        return false;
+      }
+
+      const src = params.get("src");
+      const name = params.get("name") || "PDF";
+
+      pdfViewerApp.classList.remove("hidden");
+      document.querySelector(".app-shell").classList.add("hidden");
+      document.title = `${name} | QR Drive File Manager`;
+
+      if (!src) {
+        pdfViewerStatus.innerHTML = `<strong>PDF source is missing</strong><p class="hint">The QR link does not contain a valid PDF source.</p>`;
+        return true;
+      }
+
+      try {
+        const pdfjsLib = await getPdfJs();
+        pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.worker.min.mjs";
+
+        const loadingTask = pdfjsLib.getDocument({
+          url: src,
+          withCredentials: false
+        });
+
+        const pdf = await loadingTask.promise;
+        pdfPages.innerHTML = "";
+
+        for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
+          const page = await pdf.getPage(pageNumber);
+          const viewport = page.getViewport({ scale: 1.35 });
+          const pageWrap = document.createElement("section");
+          pageWrap.className = "pdf-page";
+
+          const canvas = document.createElement("canvas");
+          const context = canvas.getContext("2d");
+          canvas.width = viewport.width;
+          canvas.height = viewport.height;
+
+          await page.render({
+            canvasContext: context,
+            viewport
+          }).promise;
+
+          pageWrap.appendChild(canvas);
+          pdfPages.appendChild(pageWrap);
+        }
+
+        pdfViewerStatus.classList.add("hidden");
+        pdfPages.classList.remove("hidden");
+        return true;
+      } catch (error) {
+        pdfViewerStatus.innerHTML = `
+          <strong>PDF could not be opened directly</strong>
+          <p class="hint">This browser could not render the public Drive PDF in strict viewer mode.</p>
+          <p class="hint">${error.message || "Unknown PDF loading error."}</p>
+        `;
+        return true;
+      }
     }
 
     function downloadQrPng() {
@@ -1859,22 +2022,28 @@
 
     function initApp() {
       initTheme();
-      loadSession();
-      updateAuthUI();
-      visibleFilesStat.textContent = "0";
-      totalFilesStat.textContent = "0";
-      lastUploadStat.textContent = "Waiting";
-      resetQrPreview();
+      renderPdfViewerMode().then((viewerMode) => {
+        if (viewerMode) {
+          return;
+        }
 
-      if (selectedFile?.viewerLink) {
-        setSelectedFile(selectedFile, false);
-      }
+        loadSession();
+        updateAuthUI();
+        visibleFilesStat.textContent = "0";
+        totalFilesStat.textContent = "0";
+        lastUploadStat.textContent = "Waiting";
+        resetQrPreview();
 
-      if (appState.accessToken && Date.now() < appState.tokenExpiry) {
-        Promise.allSettled([fetchUserProfile(), fetchQuota(), listDriveFiles()]).then(() => {
-          updateAuthUI();
-        });
-      }
+        if (selectedFile?.viewerLink) {
+          setSelectedFile(selectedFile, false);
+        }
+
+        if (appState.accessToken && Date.now() < appState.tokenExpiry) {
+          Promise.allSettled([fetchUserProfile(), fetchQuota(), listDriveFiles()]).then(() => {
+            updateAuthUI();
+          });
+        }
+      });
     }
 
     themeToggle.addEventListener("click", () => {
