@@ -1439,23 +1439,12 @@
     }
 
     function buildDirectDownloadLink(file) {
-      if (file.webContentLink) {
-        return file.webContentLink;
-      }
-
       const resourceKeyPart = file.resourceKey ? `&resourcekey=${encodeURIComponent(file.resourceKey)}` : "";
-      return `https://www.googleapis.com/drive/v3/files/${file.id}?alt=media${resourceKeyPart}`;
+      return `https://drive.google.com/uc?export=download&id=${encodeURIComponent(file.id)}${resourceKeyPart}`;
     }
 
     function buildPdfViewerLink(file) {
-      const params = new URLSearchParams({
-        mode: "pdf",
-        fileId: file.id
-      });
-      if (file.resourceKey) {
-        params.set("rk", file.resourceKey);
-      }
-      return `${getBaseAppUrl()}?${params.toString()}`;
+      return buildPublicPdfEmbedLink(file.id, file.resourceKey || "");
     }
 
     function buildPublicPdfEmbedLink(fileId, resourceKey = "") {
@@ -1968,62 +1957,12 @@
 
       const fileId = params.get("fileId");
       const resourceKey = params.get("rk") || "";
-      const src = fileId
-        ? `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?alt=media${resourceKey ? `&resourcekey=${encodeURIComponent(resourceKey)}` : ""}`
-        : "";
-      const embedSrc = fileId ? buildPublicPdfEmbedLink(fileId, resourceKey) : "";
-      const name = "PDF";
-
-      pdfViewerApp.classList.remove("hidden");
-      document.querySelector(".app-shell").classList.add("hidden");
-      document.title = `${name} | QR Drive File Manager`;
-
-      if (!src) {
-        pdfViewerStatus.innerHTML = `<strong>PDF source is missing</strong><p class="hint">The QR link does not contain a valid PDF source.</p>`;
-        return true;
+      if (!fileId) {
+        return false;
       }
 
-      try {
-        const pdfjsLib = await getPdfJs();
-        pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.worker.min.mjs";
-
-        const loadingTask = pdfjsLib.getDocument({
-          url: src,
-          withCredentials: false
-        });
-
-        const pdf = await loadingTask.promise;
-        pdfPages.innerHTML = "";
-
-        for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
-          const page = await pdf.getPage(pageNumber);
-          const viewport = page.getViewport({ scale: 1.35 });
-          const pageWrap = document.createElement("section");
-          pageWrap.className = "pdf-page";
-
-          const canvas = document.createElement("canvas");
-          const context = canvas.getContext("2d");
-          canvas.width = viewport.width;
-          canvas.height = viewport.height;
-
-          await page.render({
-            canvasContext: context,
-            viewport
-          }).promise;
-
-          pageWrap.appendChild(canvas);
-          pdfPages.appendChild(pageWrap);
-        }
-
-        pdfViewerStatus.classList.add("hidden");
-        pdfPages.classList.remove("hidden");
-        return true;
-      } catch (error) {
-        pdfViewerStatus.classList.add("hidden");
-        pdfPages.classList.remove("hidden");
-        pdfPages.innerHTML = `<iframe class="pdf-embed" src="${embedSrc}" title="PDF Viewer" loading="eager" referrerpolicy="no-referrer"></iframe>`;
-        return true;
-      }
+      window.location.replace(buildPublicPdfEmbedLink(fileId, resourceKey));
+      return true;
     }
 
     function downloadQrPng() {
