@@ -1441,9 +1441,11 @@
     function buildPdfViewerLink(file) {
       const params = new URLSearchParams({
         mode: "pdf",
-        src: buildDirectDownloadLink(file),
-        name: file.name || "PDF"
+        fileId: file.id
       });
+      if (file.resourceKey) {
+        params.set("rk", file.resourceKey);
+      }
       return `${getBaseAppUrl()}?${params.toString()}`;
     }
 
@@ -1951,8 +1953,12 @@
         return false;
       }
 
-      const src = params.get("src");
-      const name = params.get("name") || "PDF";
+      const fileId = params.get("fileId");
+      const resourceKey = params.get("rk") || "";
+      const src = fileId
+        ? `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?alt=media${resourceKey ? `&resourcekey=${encodeURIComponent(resourceKey)}` : ""}`
+        : "";
+      const name = "PDF";
 
       pdfViewerApp.classList.remove("hidden");
       document.querySelector(".app-shell").classList.add("hidden");
