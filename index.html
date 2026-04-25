@@ -750,6 +750,15 @@
       background: #ffffff;
     }
 
+    .pdf-embed {
+      width: 100%;
+      min-height: 92vh;
+      border: 0;
+      border-radius: 1rem;
+      background: #ffffff;
+      box-shadow: 0 18px 34px rgba(15, 23, 42, 0.12);
+    }
+
     @keyframes spin {
       to { transform: rotate(360deg); }
     }
@@ -1094,7 +1103,7 @@
     // Persistent browser storage keys.
     const STORAGE_KEYS = {
       theme: "qr-drive-theme",
-      clientId: "qr-drive-client-id",
+      clientId: "872791421006-cb6h430daqq9r24d4rhganrmj3hjetki.apps.googleusercontent.com",
       session: "qr-drive-session",
       selectedFile: "qr-drive-selected-file"
     };
@@ -1447,6 +1456,10 @@
         params.set("rk", file.resourceKey);
       }
       return `${getBaseAppUrl()}?${params.toString()}`;
+    }
+
+    function buildPublicPdfEmbedLink(fileId, resourceKey = "") {
+      return `https://drive.google.com/uc?export=view&id=${encodeURIComponent(fileId)}${resourceKey ? `&resourcekey=${encodeURIComponent(resourceKey)}` : ""}`;
     }
 
     function applyFilters() {
@@ -1958,6 +1971,7 @@
       const src = fileId
         ? `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?alt=media${resourceKey ? `&resourcekey=${encodeURIComponent(resourceKey)}` : ""}`
         : "";
+      const embedSrc = fileId ? buildPublicPdfEmbedLink(fileId, resourceKey) : "";
       const name = "PDF";
 
       pdfViewerApp.classList.remove("hidden");
@@ -2005,11 +2019,9 @@
         pdfPages.classList.remove("hidden");
         return true;
       } catch (error) {
-        pdfViewerStatus.innerHTML = `
-          <strong>PDF could not be opened directly</strong>
-          <p class="hint">This browser could not render the public Drive PDF in strict viewer mode.</p>
-          <p class="hint">${error.message || "Unknown PDF loading error."}</p>
-        `;
+        pdfViewerStatus.classList.add("hidden");
+        pdfPages.classList.remove("hidden");
+        pdfPages.innerHTML = `<iframe class="pdf-embed" src="${embedSrc}" title="PDF Viewer" loading="eager" referrerpolicy="no-referrer"></iframe>`;
         return true;
       }
     }
