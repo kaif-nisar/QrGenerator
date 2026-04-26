@@ -588,37 +588,6 @@
 
     <section class="card hero-card">
       <div class="hero-grid">
-        <div class="hero-copy">
-          <div class="stack">
-            <h2>Cloudflare R2 + Public PDF Link + QR</h2>
-            <p class="muted">Yeh version GitHub Pages ke liye banaya gaya hai. PDF ko R2 bucket me upload karo, public URL banao, aur scan karte hi PDF browser me seedha open ho jayegi.</p>
-          </div>
-
-          <div class="stats-grid">
-            <div class="stat-card">
-              <span class="muted">Files Loaded</span>
-              <strong id="filesLoadedStat">0</strong>
-            </div>
-            <div class="stat-card">
-              <span class="muted">Selected</span>
-              <strong id="selectedCountStat">0</strong>
-            </div>
-            <div class="stat-card">
-              <span class="muted">Total Size</span>
-              <strong id="storageUsedStat">0 B</strong>
-            </div>
-            <div class="stat-card">
-              <span class="muted">Last Upload</span>
-              <strong id="lastUploadStat">Waiting</strong>
-            </div>
-          </div>
-
-          <div class="alert warning">
-            <strong>Important setup</strong>
-            <p class="hint">R2 bucket par public access ya custom domain enable hona chahiye, aur CORS me <code>*</code> ya tumhara GitHub Pages origin allow hona chahiye.</p>
-          </div>
-        </div>
-
         <section class="qr-panel">
           <div class="panel-title">Live QR Preview</div>
           <div id="qrResult" class="qr-result">
@@ -642,6 +611,44 @@
             </div>
           </div>
         </section>
+
+        <section class="card upload-panel">
+          <div class="stack">
+            <div class="panel-title">Upload PDF Or File</div>
+            <p class="hint">PDF upload karoge to QR se direct open experience best rahega. Dusri files bhi store ho sakti hain, lekin viewer behavior browser par depend karega.</p>
+          </div>
+
+          <div class="field-group">
+            <label for="fileInput">Choose File</label>
+            <input id="fileInput" class="input" type="file" accept=".pdf,image/*,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip">
+          </div>
+
+          <div id="dropZone" class="alert info" style="border-style: dashed; padding: 1.2rem; text-align: center; cursor: pointer;">
+            <strong>Drag and drop file here</strong>
+            <p class="hint">Ya phir is box par click karke file choose karo.</p>
+          </div>
+
+          <div class="field-group">
+            <label for="customNameInput">Optional Custom File Name</label>
+            <input id="customNameInput" class="input" type="text" placeholder="leave blank to keep original file name">
+          </div>
+
+          <div class="progress-shell" id="progressShell">
+            <span id="progressText" class="hint">Uploading 0%</span>
+            <div class="progress-track">
+              <div id="progressBar" class="progress-bar"></div>
+            </div>
+          </div>
+
+          <div class="inline-actions">
+            <button id="uploadBtn" class="action-btn primary" type="button">Upload To R2</button>
+          </div>
+
+          <div class="alert success">
+            <strong>Client workflow</strong>
+            <p class="hint">Upload ke baad file list refresh hogi, public link banega, aur selected file ka QR automatically generate ho jayega.</p>
+          </div>
+        </section>
       </div>
     </section>
 
@@ -650,6 +657,25 @@
         <div class="stack">
           <div class="panel-title">R2 Connection Ready</div>
           <p class="hint">Is build me Cloudflare R2 credentials code me fixed hain, isliye user ko koi technical setup karne ki zarurat nahi hai.</p>
+        </div>
+
+        <div class="stats-grid">
+          <div class="stat-card">
+            <span class="muted">Files Loaded</span>
+            <strong id="filesLoadedStat">0</strong>
+          </div>
+          <div class="stat-card">
+            <span class="muted">Selected</span>
+            <strong id="selectedCountStat">0</strong>
+          </div>
+          <div class="stat-card">
+            <span class="muted">Total Size</span>
+            <strong id="storageUsedStat">0 B</strong>
+          </div>
+          <div class="stat-card">
+            <span class="muted">Last Upload</span>
+            <strong id="lastUploadStat">Waiting</strong>
+          </div>
         </div>
 
         <div class="alert success">
@@ -667,47 +693,14 @@
           <button id="openPublicRootBtn" class="action-btn secondary" type="button">Open Public Root</button>
         </div>
 
+        <div class="alert warning">
+          <strong>Important setup</strong>
+          <p class="hint">R2 bucket par public access ya custom domain enable hona chahiye, aur CORS me <code>*</code> ya tumhara GitHub Pages origin allow hona chahiye.</p>
+        </div>
+
         <div class="alert info">
           <strong>Recommended file behavior</strong>
           <p class="hint">Upload ke waqt PDF files ko <code>Content-Type: application/pdf</code> aur <code>Content-Disposition: inline</code> ke saath store kiya jayega, jisse scan ke baad PDF direct open ho.</p>
-        </div>
-      </section>
-
-      <section class="card upload-panel">
-        <div class="stack">
-          <div class="panel-title">Upload PDF Or File</div>
-          <p class="hint">PDF upload karoge to QR se direct open experience best rahega. Dusri files bhi store ho sakti hain, lekin viewer behavior browser par depend karega.</p>
-        </div>
-
-        <div class="field-group">
-          <label for="fileInput">Choose File</label>
-          <input id="fileInput" class="input" type="file" accept=".pdf,image/*,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip">
-        </div>
-
-        <div id="dropZone" class="alert info" style="border-style: dashed; padding: 1.2rem; text-align: center; cursor: pointer;">
-          <strong>Drag and drop file here</strong>
-          <p class="hint">Ya phir is box par click karke file choose karo.</p>
-        </div>
-
-        <div class="field-group">
-          <label for="customNameInput">Optional Custom File Name</label>
-          <input id="customNameInput" class="input" type="text" placeholder="leave blank to keep original file name">
-        </div>
-
-        <div class="progress-shell" id="progressShell">
-          <span id="progressText" class="hint">Uploading 0%</span>
-          <div class="progress-track">
-            <div id="progressBar" class="progress-bar"></div>
-          </div>
-        </div>
-
-        <div class="inline-actions">
-          <button id="uploadBtn" class="action-btn primary" type="button">Upload To R2</button>
-        </div>
-
-        <div class="alert success">
-          <strong>Client workflow</strong>
-          <p class="hint">Upload ke baad file list refresh hogi, public link banega, aur selected file ka QR automatically generate ho jayega.</p>
         </div>
       </section>
     </section>
