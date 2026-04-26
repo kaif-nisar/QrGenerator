@@ -796,14 +796,7 @@
   <div id="toastStack" class="toast-stack" aria-live="polite" aria-atomic="true"></div>
 
   <script type="module">
-    import {
-      S3Client,
-      HeadBucketCommand,
-      PutObjectCommand,
-      ListObjectsV2Command,
-      DeleteObjectCommand,
-      DeleteObjectsCommand
-    } from "https://esm.sh/@aws-sdk/client-s3@3.775.0?bundle";
+    import { AwsClient } from "https://esm.sh/aws4fetch@1.0.20?bundle";
 
     const STORAGE_KEYS = {
       theme: "qr-r2-theme",
@@ -824,7 +817,7 @@
       filteredFiles: [],
       selectedKeys: new Set(),
       selectedFile: null,
-      s3Client: null,
+      awsClient: null,
       config: { ...FIXED_R2_CONFIG },
       lastRenderedDataUrl: ""
     };
@@ -914,15 +907,81 @@
       );
     }
 
-    function buildS3Client(config) {
-      return new S3Client({
-        region: "auto",
-        endpoint: `https://${config.accountId}.r2.cloudflarestorage.com`,
-        credentials: {
-          accessKeyId: config.accessKeyId,
-          secretAccessKey: config.secretAccessKey
-        }
+    function buildAwsClient(config) {
+      return new AwsClient({
+        accessKeyId: config.accessKeyId,
+        secretAccessKey: config.secretAccessKey,
+        service: "s3",
+        region: "auto"
       });
+    }
+
+    function getApiBaseUrl() {
+      return `https://${appState.config.accountId}.r2.cloudflarestorage.com/${encodeURIComponent(appState.config.bucketName)}`;
+    }
+
+    function getObjectApiUrl(key) {
+      const encodedKey = key.split("/").map((part) => encodeURIComponent(part)).join("/");
+      return `${getApiBaseUrl()}/${encodedKey}`;
+    }
+
+    async function r2Fetch(url, options = {}) {
+      return appState.awsClient.fetch(url, options);
+    }
+
+    async function readErrorMessage(response) {
+      try {
+        const text = await response.text();
+        if (!text) return `${response.status} ${response.statusText}`;
+        const xml = new DOMParser().parseFromString(text, "application/xml");
+        const message = xml.querySelector("Message")?.textContent?.trim();
+        return message || text;
+      } catch {
+        return `${response.status} ${response.statusText}`;
+      }
+    }
+
+    async function ensureOk(response, fallbackMessage) {
+      if (response.ok) return response;
+      const message = await readErrorMessage(response);
+      throw new Error(message || fallbackMessage);
+    }
+
+    function parseListObjectsXml(xmlText) {
+      const xml = new DOMParser().parseFromString(xmlText, "application/xml");
+      const contents = Array.from(xml.querySelectorAll("Contents"));
+      const files = contents.map((entry) => {
+        const key = entry.querySelector("Key")?.textContent || "";
+        const size = Number(entry.querySelector("Size")?.textContent || 0);
+        const lastModified = entry.querySelector("LastModified")?.textContent || new Date().toISOString();
+        return {
+          key,
+          name: key.split("/").pop(),
+          size,
+          lastModified,
+          publicUrl: getPublicFileUrl(key)
+        };
+      }).filter((file) => file.key && !file.key.endsWith("/"));
+
+      return {
+        files,
+        isTruncated: xml.querySelector("IsTruncated")?.textContent === "true",
+        nextContinuationToken: xml.querySelector("NextContinuationToken")?.textContent || ""
+      };
+    }
+
+    function buildDeleteObjectsXml(files) {
+      const objectRows = files.map((file) => `<Object><Key>${escapeXml(file.key)}</Key></Object>`).join("");
+      return `<?xml version="1.0" encoding="UTF-8"?><Delete>${objectRows}<Quiet>false</Quiet></Delete>`;
+    }
+
+    function escapeXml(value) {
+      return value
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&apos;");
     }
 
     function loadFixedConfig() {
@@ -931,7 +990,7 @@
         publicBaseUrl: normalizeBaseUrl(FIXED_R2_CONFIG.publicBaseUrl),
         prefix: normalizePrefix(FIXED_R2_CONFIG.prefix)
       };
-      appState.s3Client = buildS3Client(appState.config);
+      appState.awsClient = buildAwsClient(appState.config);
       connectionStatus.textContent = "Ready";
     }
 
@@ -1159,9 +1218,10 @@
       connectionStatus.textContent = "Checking...";
 
       try {
-        await appState.s3Client.send(new HeadBucketCommand({
-          Bucket: appState.config.bucketName
-        }));
+        const response = await r2Fetch(getApiBaseUrl(), {
+          method: "HEAD"
+        });
+        await ensureOk(response, "Connection failed");
         connectionStatus.textContent = "Connected";
         showToast("R2 bucket connection successful", "success");
       } catch (error) {
@@ -1179,24 +1239,24 @@
         let continuationToken;
 
         do {
-          const response = await appState.s3Client.send(new ListObjectsV2Command({
-            Bucket: appState.config.bucketName,
-            Prefix: appState.config.prefix || undefined,
-            ContinuationToken: continuationToken
-          }));
-
-          for (const item of response.Contents || []) {
-            if (!item.Key || item.Key.endsWith("/")) continue;
-            files.push({
-              key: item.Key,
-              name: item.Key.split("/").pop(),
-              size: item.Size || 0,
-              lastModified: item.LastModified || new Date().toISOString(),
-              publicUrl: getPublicFileUrl(item.Key)
-            });
+          const params = new URLSearchParams({
+            "list-type": "2"
+          });
+          if (appState.config.prefix) {
+            params.set("prefix", appState.config.prefix);
+          }
+          if (continuationToken) {
+            params.set("continuation-token", continuationToken);
           }
 
-          continuationToken = response.IsTruncated ? response.NextContinuationToken : undefined;
+          const response = await r2Fetch(`${getApiBaseUrl()}?${params.toString()}`, {
+            method: "GET"
+          });
+          await ensureOk(response, "Could not load files");
+          const xmlText = await response.text();
+          const parsed = parseListObjectsXml(xmlText);
+          files.push(...parsed.files);
+          continuationToken = parsed.isTruncated ? parsed.nextContinuationToken : undefined;
         } while (continuationToken);
 
         appState.files = files;
@@ -1247,17 +1307,21 @@
         const ext = rawName.includes(".") ? "" : (file.name.includes(".") ? `.${file.name.split(".").pop()}` : "");
         const finalName = `${rawName}${ext}`;
         const key = buildObjectKey(finalName);
+        const contentType = file.type || (finalName.toLowerCase().endsWith(".pdf") ? "application/pdf" : "application/octet-stream");
+        const contentDisposition = finalName.toLowerCase().endsWith(".pdf")
+          ? `inline; filename="${finalName.replaceAll('"', "")}"`
+          : `attachment; filename="${finalName.replaceAll('"', "")}"`;
 
         setProgress(20, "Preparing upload...");
-        await appState.s3Client.send(new PutObjectCommand({
-          Bucket: appState.config.bucketName,
-          Key: key,
-          Body: file,
-          ContentType: file.type || (finalName.toLowerCase().endsWith(".pdf") ? "application/pdf" : "application/octet-stream"),
-          ContentDisposition: finalName.toLowerCase().endsWith(".pdf")
-            ? `inline; filename="${finalName.replaceAll('"', "")}"`
-            : `attachment; filename="${finalName.replaceAll('"', "")}"`
-        }));
+        const response = await r2Fetch(getObjectApiUrl(key), {
+          method: "PUT",
+          body: file,
+          headers: {
+            "content-type": contentType,
+            "content-disposition": contentDisposition
+          }
+        });
+        await ensureOk(response, "Upload failed");
 
         setProgress(100, "Upload complete");
         fileInput.value = "";
@@ -1339,18 +1403,19 @@
 
       try {
         if (files.length === 1) {
-          await appState.s3Client.send(new DeleteObjectCommand({
-            Bucket: appState.config.bucketName,
-            Key: files[0].key
-          }));
+          const response = await r2Fetch(getObjectApiUrl(files[0].key), {
+            method: "DELETE"
+          });
+          await ensureOk(response, "Delete failed");
         } else {
-          await appState.s3Client.send(new DeleteObjectsCommand({
-            Bucket: appState.config.bucketName,
-            Delete: {
-              Objects: files.map((file) => ({ Key: file.key })),
-              Quiet: false
+          const response = await r2Fetch(`${getApiBaseUrl()}?delete`, {
+            method: "POST",
+            body: buildDeleteObjectsXml(files),
+            headers: {
+              "content-type": "application/xml"
             }
-          }));
+          });
+          await ensureOk(response, "Bulk delete failed");
         }
 
         files.forEach((file) => appState.selectedKeys.delete(file.key));
