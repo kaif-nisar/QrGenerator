@@ -615,12 +615,12 @@
         <section class="card upload-panel">
           <div class="stack">
             <div class="panel-title">Upload PDF Or File</div>
-            <p class="hint">PDF upload karoge to QR se direct open experience best rahega. Dusri files bhi store ho sakti hain, lekin viewer behavior browser par depend karega.</p>
+            <p class="hint">Image, video, PDF, aur baaki uploaded files ko QR scan ke baad direct open mode me serve kiya jayega. Final display browser ke supported format par depend karega.</p>
           </div>
 
           <div class="field-group">
             <label for="fileInput">Choose File</label>
-            <input id="fileInput" class="input" type="file" accept=".pdf,image/*,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip">
+            <input id="fileInput" class="input" type="file" accept="*/*">
           </div>
 
           <div id="dropZone" class="alert info" style="border-style: dashed; padding: 1.2rem; text-align: center; cursor: pointer;">
@@ -700,7 +700,7 @@
 
         <div class="alert info">
           <strong>Recommended file behavior</strong>
-          <p class="hint">Upload ke waqt PDF files ko <code>Content-Type: application/pdf</code> aur <code>Content-Disposition: inline</code> ke saath store kiya jayega, jisse scan ke baad PDF direct open ho.</p>
+          <p class="hint">Upload ke waqt files ko available MIME type ke saath <code>Content-Disposition: inline</code> me store kiya jayega, jisse supported image, video, PDF, aur doosri files scan ke baad direct open ho saken.</p>
         </div>
       </section>
     </section>
@@ -1053,10 +1053,10 @@
       appState.selectedFile = null;
       localStorage.removeItem(STORAGE_KEYS.selectedFile);
       selectedFileTag.textContent = "No file selected";
-      selectedTypeTag.textContent = "PDF ready mode";
+      selectedTypeTag.textContent = "Direct open mode";
       timestampTag.textContent = "Awaiting upload";
-      selectedLinkBox.textContent = "Public PDF link will appear here.";
-      qrCodeMount.innerHTML = "<p class='hint'>Upload ya select a PDF file to generate QR automatically.</p>";
+      selectedLinkBox.textContent = "Public file link will appear here.";
+      qrCodeMount.innerHTML = "<p class='hint'>Upload ya select a file to generate QR automatically.</p>";
       appState.lastRenderedDataUrl = "";
     }
 
@@ -1301,9 +1301,7 @@
         const finalName = `${rawName}${ext}`;
         const key = buildObjectKey(finalName);
         const contentType = file.type || (finalName.toLowerCase().endsWith(".pdf") ? "application/pdf" : "application/octet-stream");
-        const contentDisposition = finalName.toLowerCase().endsWith(".pdf")
-          ? `inline; filename="${finalName.replaceAll('"', "")}"`
-          : `attachment; filename="${finalName.replaceAll('"', "")}"`;
+        const contentDisposition = `inline; filename="${finalName.replaceAll('"', "")}"`;
 
         setProgress(20, "Preparing upload...");
         const response = await r2Fetch(getObjectApiUrl(key), {
