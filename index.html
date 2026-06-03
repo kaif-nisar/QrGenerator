@@ -228,6 +228,12 @@
       transition: border-color 0.2s ease, box-shadow 0.2s ease;
     }
 
+    input[type="range"] {
+      width: 100%;
+      margin: 0.15rem 0 0;
+      accent-color: var(--accent);
+    }
+
     .input:focus,
     .select:focus {
       border-color: var(--accent);
@@ -607,6 +613,7 @@
             <div class="field-group">
               <label for="qrSizeInput">QR Size (inch)</label>
               <input id="qrSizeInput" class="input" type="number" min="0.1" max="10" step="0.1" value="1">
+              <input id="qrSizeRange" type="range" min="0.1" max="10" step="0.1" value="1">
               <p class="hint">Print-friendly output ke liye 300 DPI basis use ho raha hai. 0.1 inch = 30 px, 1 inch = 300 px.</p>
             </div>
 
@@ -838,6 +845,7 @@
     const timestampTag = document.getElementById("timestampTag");
     const selectedLinkBox = document.getElementById("selectedLinkBox");
     const qrSizeInput = document.getElementById("qrSizeInput");
+    const qrSizeRange = document.getElementById("qrSizeRange");
     const openLinkBtn = document.getElementById("openLinkBtn");
     const copyBtn = document.getElementById("copyBtn");
     const downloadPngBtn = document.getElementById("downloadPngBtn");
@@ -916,7 +924,9 @@
     }
 
     function syncQrSizeInput() {
-      qrSizeInput.value = getQrSizeInch().toFixed(1);
+      const value = getQrSizeInch().toFixed(1);
+      qrSizeInput.value = value;
+      qrSizeRange.value = value;
     }
 
     function isConfigComplete(config) {
@@ -1512,6 +1522,14 @@
       openLinkBtn.addEventListener("click", openSelectedFile);
       downloadPngBtn.addEventListener("click", downloadQrPng);
       qrSizeInput.addEventListener("input", () => {
+        syncQrSizeInput();
+        if (appState.selectedFile) {
+          renderQrForFile(appState.selectedFile);
+          renderFileTable();
+        }
+      });
+      qrSizeRange.addEventListener("input", () => {
+        qrSizeInput.value = qrSizeRange.value;
         syncQrSizeInput();
         if (appState.selectedFile) {
           renderQrForFile(appState.selectedFile);
