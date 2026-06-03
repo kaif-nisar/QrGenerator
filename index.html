@@ -606,8 +606,8 @@
 
             <div class="field-group">
               <label for="qrSizeInput">QR Size (inch)</label>
-              <input id="qrSizeInput" class="input" type="number" min="0.5" max="10" step="0.1" value="1">
-              <p class="hint">Print-friendly output ke liye 300 DPI basis use ho raha hai. 0.5 inch = 150 px, 1 inch = 300 px.</p>
+              <input id="qrSizeInput" class="input" type="number" min="0.1" max="10" step="0.1" value="1">
+              <p class="hint">Print-friendly output ke liye 300 DPI basis use ho raha hai. 0.1 inch = 30 px, 1 inch = 300 px.</p>
             </div>
 
             <div class="inline-actions">
@@ -778,10 +778,10 @@
 
     <section class="card" style="margin-top: 1rem;">
       <div class="panel-title">CORS Setup For R2</div>
-      <p class="hint" style="margin: 0.45rem 0 1rem;">Cloudflare R2 bucket par is tarah ka CORS rule helpful rahega. Origin ko apne GitHub Pages URL se replace kar sakte ho.</p>
+      <p class="hint" style="margin: 0.45rem 0 1rem;">Cloudflare R2 bucket par is tarah ka CORS rule helpful rahega. Agar page local file se khul raha ho to <code>null</code> origin bhi allow karna useful hota hai.</p>
       <pre class="code-block">[
   {
-    "AllowedOrigins": ["*"],
+    "AllowedOrigins": ["*", "null"],
     "AllowedMethods": ["GET", "PUT", "DELETE", "HEAD"],
     "AllowedHeaders": ["*"],
     "ExposeHeaders": ["ETag"],
@@ -856,7 +856,7 @@
     const modalRoot = document.getElementById("modalRoot");
     const toastStack = document.getElementById("toastStack");
     const QR_EXPORT_DPI = 300;
-    const QR_MIN_INCH = 0.5;
+    const QR_MIN_INCH = 0.1;
     const QR_DEFAULT_INCH = 1;
 
     function readJSON(key, fallback) {
@@ -912,7 +912,7 @@
     }
 
     function getQrPixelSize() {
-      return Math.max(150, Math.round(getQrSizeInch() * QR_EXPORT_DPI));
+      return Math.max(30, Math.round(getQrSizeInch() * QR_EXPORT_DPI));
     }
 
     function syncQrSizeInput() {
