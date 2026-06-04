@@ -7,6 +7,23 @@
   <meta name="description" content="Cloudflare R2 PDF QR manager for static hosting. Upload PDFs, generate QR codes, and manage files from GitHub Pages.">
   <title>QR R2 File Manager</title>
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%23102542'/%3E%3Cpath d='M18 14h28a8 8 0 0 1 8 8v20a8 8 0 0 1-8 8H18a8 8 0 0 1-8-8V22a8 8 0 0 1 8-8Z' fill='%23fff' opacity='.14'/%3E%3Crect x='14' y='16' width='14' height='14' rx='3' fill='%23fff'/%3E%3Crect x='18' y='20' width='6' height='6' rx='1' fill='%23102542'/%3E%3Crect x='36' y='16' width='14' height='14' rx='3' fill='%23fff'/%3E%3Crect x='40' y='20' width='6' height='6' rx='1' fill='%23102542'/%3E%3Crect x='14' y='36' width='14' height='14' rx='3' fill='%23fff'/%3E%3Crect x='18' y='40' width='6' height='6' rx='1' fill='%23102542'/%3E%3Cpath d='M38 38h6v6h-6zm8 0h6v6h-6zm-8 8h6v6h-6zm8 0h6v6h-6z' fill='%23f59e0b'/%3E%3C/svg%3E">
+  <script>
+    (function () {
+      try {
+        const hash = window.location.hash.replace(/^#/, "");
+        if (!hash) return;
+        const params = new URLSearchParams(hash);
+        const rawTarget = params.get("o");
+        if (!rawTarget) return;
+        const target = new URL(rawTarget, window.location.href);
+        if (target.protocol === "http:" || target.protocol === "https:") {
+          window.location.replace(target.toString());
+        }
+      } catch {
+        /* ignore malformed scan routes */
+      }
+    })();
+  </script>
   <script defer src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
   <style>
     :root {
@@ -612,9 +629,9 @@
 
             <div class="field-group">
               <label for="qrSizeInput">QR Size (inch)</label>
-              <input id="qrSizeInput" class="input" type="number" min="0.1" max="10" step="0.1" value="1">
-              <input id="qrSizeRange" type="range" min="0.1" max="10" step="0.1" value="1">
-              <p class="hint">Print-friendly output ke liye 300 DPI basis use ho raha hai. 0.1 inch = 30 px, 1 inch = 300 px.</p>
+              <input id="qrSizeInput" class="input" type="number" min="0.05" max="10" step="0.05" value="1">
+              <input id="qrSizeRange" type="range" min="0.05" max="10" step="0.05" value="1">
+              <p class="hint">Print-friendly output ke liye 600 DPI basis use ho raha hai. Chhote QR ke liye QR text jitna short hoga, scan utna better hoga.</p>
             </div>
 
             <div class="inline-actions">
@@ -863,9 +880,43 @@
     const filesTableBody = document.getElementById("filesTableBody");
     const modalRoot = document.getElementById("modalRoot");
     const toastStack = document.getElementById("toastStack");
-    const QR_EXPORT_DPI = 300;
-    const QR_MIN_INCH = 0.1;
+    const QR_EXPORT_DPI = 600;
+    const QR_MIN_INCH = 0.05;
     const QR_DEFAULT_INCH = 1;
+    const AUTO_OPEN_PARAM = "o";
+
+    function getAppBaseUrl() {
+      const url = new URL(window.location.href);
+      url.search = "";
+      url.hash = "";
+      return url.toString();
+    }
+
+    function buildScanUrl(file) {
+      const url = new URL(getAppBaseUrl());
+      url.hash = `${AUTO_OPEN_PARAM}=${encodeURIComponent(file.publicUrl)}`;
+      return url.toString();
+    }
+
+    function getAutoOpenTarget() {
+      try {
+        const hash = window.location.hash.replace(/^#/, "");
+        if (!hash) return "";
+        const params = new URLSearchParams(hash);
+        const rawTarget = params.get(AUTO_OPEN_PARAM);
+        if (!rawTarget) return "";
+        const parsed = new URL(rawTarget, window.location.href);
+        return parsed.protocol === "http:" || parsed.protocol === "https:" ? parsed.toString() : "";
+      } catch {
+        return "";
+      }
+    }
+
+    const AUTO_OPEN_TARGET = getAutoOpenTarget();
+
+    if (AUTO_OPEN_TARGET) {
+      window.location.replace(AUTO_OPEN_TARGET);
+    }
 
     function readJSON(key, fallback) {
       try {
@@ -921,6 +972,14 @@
 
     function getQrPixelSize() {
       return Math.max(30, Math.round(getQrSizeInch() * QR_EXPORT_DPI));
+    }
+
+    function getQrCorrectLevel() {
+      const size = getQrSizeInch();
+      if (size <= 0.15) return QRCode.CorrectLevel.L;
+      if (size <= 0.35) return QRCode.CorrectLevel.M;
+      if (size <= 0.75) return QRCode.CorrectLevel.Q;
+      return QRCode.CorrectLevel.H;
     }
 
     function syncQrSizeInput() {
@@ -1111,14 +1170,15 @@
       const mount = document.createElement("div");
       qrCodeMount.appendChild(mount);
       const qrSizePx = getQrPixelSize();
+      const qrTargetUrl = buildScanUrl(file);
 
       const qr = new QRCode(mount, {
-        text: file.publicUrl,
+        text: qrTargetUrl,
         width: qrSizePx,
         height: qrSizePx,
         colorDark: "#102542",
         colorLight: "#ffffff",
-        correctLevel: QRCode.CorrectLevel.H
+        correctLevel: getQrCorrectLevel()
       });
 
       window.setTimeout(() => {
@@ -1596,6 +1656,9 @@
     }
 
     async function initApp() {
+      if (AUTO_OPEN_TARGET) {
+        return;
+      }
       initTheme();
       loadFixedConfig();
       syncQrSizeInput();
@@ -1606,7 +1669,9 @@
       await refreshFiles();
     }
 
-    window.addEventListener("load", initApp);
+    if (!AUTO_OPEN_TARGET) {
+      window.addEventListener("load", initApp);
+    }
   </script>
 </body>
 </html>
