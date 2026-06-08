@@ -10,12 +10,13 @@
   <script>
     (function () {
       try {
-        const hash = window.location.hash.replace(/^#/, "");
-        if (!hash) return;
-        const params = new URLSearchParams(hash);
-        const rawTarget = params.get("o");
-        if (!rawTarget) return;
-        const target = new URL(rawTarget, window.location.href);
+        const search = window.location.search.replace(/^\?/, "");
+        if (!search) return;
+        const params = new URLSearchParams(search);
+        const rawKey = params.get("k");
+        if (!rawKey) return;
+        const publicBaseUrl = "https://pub-498a9ccddb9a499d8e4ad76235fda6c0.r2.dev";
+        const target = new URL(rawKey, `${publicBaseUrl.replace(/\/+$/, "")}/`);
         if (target.protocol === "http:" || target.protocol === "https:") {
           window.location.replace(target.toString());
         }
@@ -627,12 +628,23 @@
 
             <div class="file-link-box" id="selectedLinkBox">Public PDF link will appear here.</div>
 
-            <div class="field-group">
-              <label for="qrSizeInput">QR Size (inch)</label>
-              <input id="qrSizeInput" class="input" type="number" min="0.05" max="10" step="0.05" value="1">
-              <input id="qrSizeRange" type="range" min="0.05" max="10" step="0.05" value="1">
-              <p class="hint">Print-friendly output ke liye 600 DPI basis use ho raha hai. Chhote QR ke liye QR text jitna short hoga, scan utna better hoga.</p>
+            <div class="field-grid">
+              <div class="field-group">
+                <label for="qrSizeInput">QR Size (inch)</label>
+                <input id="qrSizeInput" class="input" type="number" min="0.05" max="10" step="0.01" value="1">
+                <input id="qrSizeRange" type="range" min="0.05" max="10" step="0.05" value="1">
+              </div>
+              <div class="field-group">
+                <label for="qrLevelSelect">Scan Precision (Density)</label>
+                <select id="qrLevelSelect" class="select">
+                  <option value="L">Low (Best for 0.05" - 0.1" size)</option>
+                  <option value="M" selected>Medium (Standard)</option>
+                  <option value="Q">Quartile (High Detail)</option>
+                  <option value="H">High (Max Recovery)</option>
+                </select>
+              </div>
             </div>
+            <p class="hint">Tiny sizes (0.1") ke liye hamesha 'Low' density select karein taaki dots bade rahein aur scan fast ho.</p>
 
             <div class="inline-actions">
               <button id="openLinkBtn" class="action-btn primary" type="button">Open PDF</button>
@@ -805,11 +817,11 @@
       <p class="hint" style="margin: 0.45rem 0 1rem;">Cloudflare R2 bucket par is tarah ka CORS rule helpful rahega. Agar page local file se khul raha ho to <code>null</code> origin bhi allow karna useful hota hai.</p>
       <pre class="code-block">[
   {
-    "AllowedOrigins": ["*", "null"],
-    "AllowedMethods": ["GET", "PUT", "DELETE", "HEAD"],
+    "AllowedOrigins": ["*", "null", "http://localhost:*"],
+    "AllowedMethods": ["GET", "PUT", "POST", "DELETE", "HEAD", "OPTIONS"],
     "AllowedHeaders": ["*"],
-    "ExposeHeaders": ["ETag"],
-    "MaxAgeSeconds": 3000
+    "ExposeHeaders": ["ETag", "Content-Type", "Content-Length"],
+    "MaxAgeSeconds": 3600
   }
 ]</pre>
     </section>
@@ -863,6 +875,7 @@
     const selectedLinkBox = document.getElementById("selectedLinkBox");
     const qrSizeInput = document.getElementById("qrSizeInput");
     const qrSizeRange = document.getElementById("qrSizeRange");
+    const qrLevelSelect = document.getElementById("qrLevelSelect");
     const openLinkBtn = document.getElementById("openLinkBtn");
     const copyBtn = document.getElementById("copyBtn");
     const downloadPngBtn = document.getElementById("downloadPngBtn");
@@ -883,7 +896,7 @@
     const QR_EXPORT_DPI = 600;
     const QR_MIN_INCH = 0.05;
     const QR_DEFAULT_INCH = 1;
-    const AUTO_OPEN_PARAM = "o";
+    const AUTO_OPEN_PARAM = "k";
 
     function getAppBaseUrl() {
       const url = new URL(window.location.href);
@@ -894,18 +907,18 @@
 
     function buildScanUrl(file) {
       const url = new URL(getAppBaseUrl());
-      url.hash = `${AUTO_OPEN_PARAM}=${encodeURIComponent(file.publicUrl)}`;
+      url.search = `${AUTO_OPEN_PARAM}=${encodeURIComponent(file.key)}`;
       return url.toString();
     }
 
     function getAutoOpenTarget() {
       try {
-        const hash = window.location.hash.replace(/^#/, "");
-        if (!hash) return "";
-        const params = new URLSearchParams(hash);
-        const rawTarget = params.get(AUTO_OPEN_PARAM);
-        if (!rawTarget) return "";
-        const parsed = new URL(rawTarget, window.location.href);
+        const search = window.location.search.replace(/^\?/, "");
+        if (!search) return "";
+        const params = new URLSearchParams(search);
+        const rawKey = params.get(AUTO_OPEN_PARAM);
+        if (!rawKey) return "";
+        const parsed = new URL(rawKey, `${FIXED_R2_CONFIG.publicBaseUrl.replace(/\/+$/, "")}/`);
         return parsed.protocol === "http:" || parsed.protocol === "https:" ? parsed.toString() : "";
       } catch {
         return "";
@@ -971,15 +984,16 @@
     }
 
     function getQrPixelSize() {
-      return Math.max(30, Math.round(getQrSizeInch() * QR_EXPORT_DPI));
+      // Multiplier increased for ultra-high resolution buffer
+      return Math.max(120, Math.round(getQrSizeInch() * QR_EXPORT_DPI));
     }
 
     function getQrCorrectLevel() {
-      const size = getQrSizeInch();
-      if (size <= 0.15) return QRCode.CorrectLevel.L;
-      if (size <= 0.35) return QRCode.CorrectLevel.M;
-      if (size <= 0.75) return QRCode.CorrectLevel.Q;
-      return QRCode.CorrectLevel.H;
+      const level = qrLevelSelect.value;
+      if (level === "L") return QRCode.CorrectLevel.L;
+      if (level === "Q") return QRCode.CorrectLevel.Q;
+      if (level === "H") return QRCode.CorrectLevel.H;
+      return QRCode.CorrectLevel.M;
     }
 
     function syncQrSizeInput() {
@@ -1092,10 +1106,11 @@
     }
 
     function buildObjectKey(fileName) {
-      const cleanName = fileName.replace(/[^\w.\-() ]+/g, "-").replace(/\s+/g, " ").trim();
-      const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+      // Original name ki jagah random unique ID generate kar rahe hain
+      const ext = fileName.includes(".") ? `.${fileName.split(".").pop()}` : "";
+      const randomId = Math.random().toString(36).substring(2, 10) + Math.random().toString(36).substring(2, 10);
+      const key = `file-${randomId}${ext}`;
       const prefix = normalizePrefix(appState.config.prefix);
-      const key = `${timestamp}-${cleanName}`;
       return prefix ? `${prefix}/${key}` : key;
     }
 
@@ -1170,7 +1185,7 @@
       const mount = document.createElement("div");
       qrCodeMount.appendChild(mount);
       const qrSizePx = getQrPixelSize();
-      const qrTargetUrl = buildScanUrl(file);
+      const qrTargetUrl = file.publicUrl;
 
       const qr = new QRCode(mount, {
         text: qrTargetUrl,
@@ -1401,7 +1416,10 @@
         const finalName = `${rawName}${ext}`;
         const key = buildObjectKey(finalName);
         const contentType = file.type || (finalName.toLowerCase().endsWith(".pdf") ? "application/pdf" : "application/octet-stream");
-        const contentDisposition = `inline; filename="${finalName.replaceAll('"', "")}"`;
+        
+        // Browser tab mein original name na dikhe, isliye generic filename set kar rahe hain
+        const genericName = `document${ext}`;
+        const contentDisposition = `inline; filename="${genericName}"`;
 
         setProgress(20, "Preparing upload...");
         const response = await r2Fetch(getObjectApiUrl(key), {
@@ -1583,6 +1601,12 @@
       downloadPngBtn.addEventListener("click", downloadQrPng);
       qrSizeInput.addEventListener("input", () => {
         syncQrSizeInput();
+        if (appState.selectedFile) {
+          renderQrForFile(appState.selectedFile);
+          renderFileTable();
+        }
+      });
+      qrLevelSelect.addEventListener("change", () => {
         if (appState.selectedFile) {
           renderQrForFile(appState.selectedFile);
           renderFileTable();
