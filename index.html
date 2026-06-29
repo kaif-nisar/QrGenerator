@@ -665,13 +665,13 @@
 
           <div class="field-group">
             <label for="fileInput">Choose File</label>
-            <input id="fileInput" class="input" type="file" accept="*/*" multiple>
+            <input id="fileInput" class="input" type="file">
           </div>
 
-          <label id="dropZone" for="fileInput" class="alert info" style="border-style: dashed; padding: 1.2rem; text-align: center; cursor: pointer;">
+          <div id="dropZone" class="alert info" style="border-style: dashed; padding: 1.2rem; text-align: center; cursor: pointer;">
             <strong>Drag and drop file here</strong>
             <p class="hint">Ya phir is box par click karke file choose karo.</p>
-          </label>
+          </div>
 
           <div class="field-group">
             <label for="customNameInput">File Name</label>
@@ -1800,6 +1800,7 @@
         updateStats();
       });
 
+      dropZone.addEventListener("click", () => fileInput.click());
       dropZone.addEventListener("dragover", (event) => {
         event.preventDefault();
         dropZone.style.background = "rgba(59, 130, 246, 0.12)";
