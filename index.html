@@ -621,7 +621,7 @@
             <div class="qr-card">
               <div class="qr-meta">
                 <span id="selectedFileTag" class="meta-tag">No file selected</span>
-                <span id="selectedTypeTag" class="meta-tag">File ready mode</span>
+                <span id="selectedTypeTag" class="meta-tag">Direct open mode</span>
                 <span id="timestampTag" class="meta-tag">Awaiting upload</span>
               </div>
               <div id="qrCodeMount">
@@ -629,7 +629,7 @@
               </div>
             </div>
 
-            <div class="file-link-box" id="selectedLinkBox">Clean scan link will appear here.</div>
+            <div class="file-link-box" id="selectedLinkBox">Direct file link will appear here.</div>
 
             <div class="field-grid">
               <div class="field-group">
@@ -650,8 +650,7 @@
             <p class="hint">Tiny sizes (0.1") ke liye hamesha 'Low' density select karein taaki dots bade rahein aur scan fast ho.</p>
 
             <div class="inline-actions">
-              <button id="openLinkBtn" class="action-btn primary" type="button">Open File</button>
-              <button id="copyBtn" class="action-btn secondary" type="button">Copy Link</button>
+              <button id="copyBtn" class="action-btn secondary" type="button">Copy Direct Link</button>
               <button id="downloadPngBtn" class="action-btn secondary" type="button">Download QR</button>
             </div>
           </div>
@@ -660,7 +659,7 @@
         <section class="card upload-panel">
           <div class="stack">
               <div class="panel-title">Upload File</div>
-              <p class="hint">Image, video, PDF, aur baaki uploaded files ko QR scan ke baad direct open mode me serve kiya jayega. Final display browser ke supported format par depend karega.</p>
+              <p class="hint">Image, video, PDF, aur baaki uploaded files ko QR scan ke baad direct file URL se open kiya jayega. Final display browser ke supported format par depend karega.</p>
           </div>
 
           <div class="field-group">
@@ -692,7 +691,7 @@
 
           <div class="alert success">
             <strong>Client workflow</strong>
-            <p class="hint">Upload ke baad file list refresh hogi, clean scan link banega, aur selected file ka QR automatically generate ho jayega.</p>
+            <p class="hint">Upload ke baad file list refresh hogi, direct file link banega, aur selected file ka QR automatically generate ho jayega.</p>
           </div>
         </section>
       </div>
@@ -883,7 +882,6 @@
     const qrSizeInput = document.getElementById("qrSizeInput");
     const qrSizeRange = document.getElementById("qrSizeRange");
     const qrLevelSelect = document.getElementById("qrLevelSelect");
-    const openLinkBtn = document.getElementById("openLinkBtn");
     const copyBtn = document.getElementById("copyBtn");
     const downloadPngBtn = document.getElementById("downloadPngBtn");
     const filesLoadedStat = document.getElementById("filesLoadedStat");
@@ -906,25 +904,8 @@
     const AUTO_OPEN_PARAM = "k";
     const AUTO_OPEN_KEY = window.__AUTO_OPEN_R2_KEY__ || getAutoOpenKey();
 
-    function getAppBaseUrl() {
-      const url = new URL(window.location.href);
-      url.search = "";
-      url.hash = "";
-      if (/\/[^/]+\.[^/]+$/.test(url.pathname)) {
-        url.pathname = url.pathname.replace(/[^/]+$/, "");
-      } else if (!url.pathname.endsWith("/")) {
-        url.pathname = url.pathname.replace(/[^/]+$/, "");
-        if (!url.pathname.endsWith("/")) {
-          url.pathname = `${url.pathname}/`;
-        }
-      }
-      return url.toString();
-    }
-
     function buildScanUrl(file) {
-      const url = new URL(getAppBaseUrl());
-      url.search = `${AUTO_OPEN_PARAM}=${encodeURIComponent(file.key)}`;
-      return url.toString();
+      return getPublicFileUrl(file.key);
     }
 
     function getAutoOpenKey() {
@@ -1167,89 +1148,12 @@
       }
     }
 
-    function getCleanFileSlug(fileKey) {
-      const baseName = String(fileKey || "").split("/").pop() || "";
-      const withoutExt = baseName.replace(/\.[^.]+$/, "");
-      const slug = withoutExt.replace(/-[a-z0-9]{16}$/i, "");
-      return slug || withoutExt || "file";
-    }
-
-    function getCurrentViewerPath(slug) {
-      const url = new URL(window.location.href);
-      url.search = "";
-      url.hash = "";
-      const basePath = url.pathname.replace(/\/?index\.html?$/i, "/").replace(/\/+$/, "");
-      url.pathname = `${basePath}/${encodeURIComponent(slug)}`;
-      return url.toString();
-    }
-
-    function setCleanAddressBar(file) {
-      try {
-        const slug = getCleanFileSlug(file.key);
-        window.history.replaceState({}, "", getCurrentViewerPath(slug));
-        document.title = `${slug} - QR R2 File Manager`;
-      } catch {
-        /* keep current URL if history update fails */
-      }
-    }
-
-    function getPreviewMode(file) {
-      const lower = String(file?.name || "").toLowerCase();
-      if (lower.endsWith(".pdf")) return "pdf";
-      if (/\.(png|jpg|jpeg|webp|gif|svg)$/.test(lower)) return "image";
-      if (/\.(mp4|webm|ogg|mov)$/.test(lower)) return "video";
-      if (/\.(mp3|wav|m4a|aac|oga)$/.test(lower)) return "audio";
-      return "generic";
-    }
-
     function openFileViewer(file) {
       if (!file?.publicUrl) {
         showToast("Select a file first", "warning");
         return;
       }
-
-      setCleanAddressBar(file);
-      const mode = getPreviewMode(file);
-      const safeName = escapeHtml(file.name);
-      const safeUrl = escapeHtml(file.publicUrl);
-      const preview =
-        mode === "image"
-          ? `<img src="${safeUrl}" alt="${safeName}" style="max-width:100%; max-height:70vh; object-fit:contain; border-radius:1rem; background:#fff;">`
-          : mode === "video"
-            ? `<video src="${safeUrl}" controls playsinline style="width:100%; max-height:70vh; border-radius:1rem; background:#000;"></video>`
-            : mode === "audio"
-              ? `<audio src="${safeUrl}" controls style="width:100%;"></audio>`
-              : `<iframe src="${safeUrl}" title="${safeName}" style="width:100%; height:70vh; border:0; border-radius:1rem; background:#fff;"></iframe>`;
-
-      modalRoot.innerHTML = `
-        <div class="modal-backdrop">
-          <div class="modal-card" style="width:min(980px, 100%);">
-            <div class="stack">
-              <div class="panel-title">Opened File</div>
-              <div class="hint">${safeName}</div>
-            </div>
-            <div class="stack" style="margin-top: 1rem;">
-              <div class="viewer-preview">${preview}</div>
-            </div>
-            <div class="inline-actions" style="margin-top: 1rem;">
-              <button id="copyViewerLinkBtn" class="action-btn secondary" type="button">Copy Clean Link</button>
-              <button id="closeViewerBtn" class="action-btn primary" type="button">Close</button>
-            </div>
-          </div>
-        </div>
-      `;
-      modalRoot.classList.remove("hidden");
-
-      document.getElementById("copyViewerLinkBtn").addEventListener("click", async () => {
-        try {
-          await navigator.clipboard.writeText(window.location.href);
-          showToast("Clean link copied", "success");
-        } catch {
-          showToast("Clipboard access failed", "error");
-        }
-      });
-
-      document.getElementById("closeViewerBtn").addEventListener("click", closeModal);
+      window.open(file.publicUrl, "_blank", "noopener,noreferrer");
     }
 
     function formatBytes(bytes) {
@@ -1306,7 +1210,7 @@
       selectedFileTag.textContent = "No file selected";
       selectedTypeTag.textContent = "Direct open mode";
       timestampTag.textContent = "Awaiting upload";
-      selectedLinkBox.textContent = "Clean scan link will appear here.";
+      selectedLinkBox.textContent = "Direct file link will appear here.";
       qrCodeMount.innerHTML = "<p class='hint'>Upload ya select a file to generate QR automatically.</p>";
       appState.lastRenderedDataUrl = "";
     }
@@ -1433,7 +1337,7 @@
         row.querySelector("[data-action='copy']").addEventListener("click", async () => {
           try {
             await navigator.clipboard.writeText(buildScanUrl(file));
-            showToast("Clean link copied", "success");
+            showToast("Direct link copied", "success");
           } catch {
             showToast("Clipboard access failed", "error");
           }
@@ -1508,9 +1412,10 @@
         appState.files = files;
         appState.selectedKeys = new Set([...appState.selectedKeys].filter((key) => files.some((file) => file.key === key)));
         connectionStatus.textContent = "Connected";
-        if (!(await handleAutoOpenSelection())) {
-          rehydrateSelectedFile();
+        if (await handleAutoOpenSelection()) {
+          return;
         }
+        rehydrateSelectedFile();
         applyFilters();
         showToast("R2 files refreshed", "success");
       } catch (error) {
@@ -1550,8 +1455,7 @@
         return false;
       }
 
-      renderQrForFile(found);
-      openFileViewer(found);
+      window.location.replace(found.publicUrl);
       return true;
     }
 
@@ -1702,7 +1606,7 @@
 
       try {
         await navigator.clipboard.writeText(buildScanUrl(appState.selectedFile));
-        showToast("Clean link copied", "success");
+        showToast("Direct link copied", "success");
       } catch {
         showToast("Clipboard access failed", "error");
       }
@@ -1748,7 +1652,6 @@
       searchInput.addEventListener("input", applyFilters);
       sortFilter.addEventListener("change", applyFilters);
       copyBtn.addEventListener("click", copySelectedLink);
-      openLinkBtn.addEventListener("click", openSelectedFile);
       downloadPngBtn.addEventListener("click", downloadQrPng);
       customNameInput.addEventListener("blur", normalizeUploadInput);
       qrSizeInput.addEventListener("input", () => {
