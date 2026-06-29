@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="theme-color" content="#102542">
-  <meta name="description" content="Cloudflare R2 PDF QR manager for static hosting. Upload PDFs, generate QR codes, and manage files from GitHub Pages.">
+  <meta name="description" content="Cloudflare R2 file QR manager for static hosting. Upload files, generate QR codes, and manage files from GitHub Pages.">
   <title>QR R2 File Manager</title>
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%23102542'/%3E%3Cpath d='M18 14h28a8 8 0 0 1 8 8v20a8 8 0 0 1-8 8H18a8 8 0 0 1-8-8V22a8 8 0 0 1 8-8Z' fill='%23fff' opacity='.14'/%3E%3Crect x='14' y='16' width='14' height='14' rx='3' fill='%23fff'/%3E%3Crect x='18' y='20' width='6' height='6' rx='1' fill='%23102542'/%3E%3Crect x='36' y='16' width='14' height='14' rx='3' fill='%23fff'/%3E%3Crect x='40' y='20' width='6' height='6' rx='1' fill='%23102542'/%3E%3Crect x='14' y='36' width='14' height='14' rx='3' fill='%23fff'/%3E%3Crect x='18' y='40' width='6' height='6' rx='1' fill='%23102542'/%3E%3Cpath d='M38 38h6v6h-6zm8 0h6v6h-6zm-8 8h6v6h-6zm8 0h6v6h-6z' fill='%23f59e0b'/%3E%3C/svg%3E">
   <script>
@@ -597,7 +597,7 @@
         <div class="brand-mark">R2</div>
         <div>
           <h1>QR R2 File Manager</h1>
-          <p>Static GitHub Pages app for Cloudflare R2 uploads, public PDF links, QR generation, and bulk delete.</p>
+          <p>Static GitHub Pages app for Cloudflare R2 uploads, public file links, QR generation, and bulk delete.</p>
         </div>
       </div>
 
@@ -618,15 +618,15 @@
             <div class="qr-card">
               <div class="qr-meta">
                 <span id="selectedFileTag" class="meta-tag">No file selected</span>
-                <span id="selectedTypeTag" class="meta-tag">PDF ready mode</span>
+                <span id="selectedTypeTag" class="meta-tag">File ready mode</span>
                 <span id="timestampTag" class="meta-tag">Awaiting upload</span>
               </div>
               <div id="qrCodeMount">
-                <p class="hint">Upload ya select a PDF file to generate QR automatically.</p>
+                <p class="hint">Upload ya select a file to generate QR automatically.</p>
               </div>
             </div>
 
-            <div class="file-link-box" id="selectedLinkBox">Public PDF link will appear here.</div>
+            <div class="file-link-box" id="selectedLinkBox">Public file link will appear here.</div>
 
             <div class="field-grid">
               <div class="field-group">
@@ -647,7 +647,7 @@
             <p class="hint">Tiny sizes (0.1") ke liye hamesha 'Low' density select karein taaki dots bade rahein aur scan fast ho.</p>
 
             <div class="inline-actions">
-              <button id="openLinkBtn" class="action-btn primary" type="button">Open PDF</button>
+              <button id="openLinkBtn" class="action-btn primary" type="button">Open File</button>
               <button id="copyBtn" class="action-btn secondary" type="button">Copy Link</button>
               <button id="downloadPngBtn" class="action-btn secondary" type="button">Download QR</button>
             </div>
@@ -656,13 +656,13 @@
 
         <section class="card upload-panel">
           <div class="stack">
-            <div class="panel-title">Upload PDF Or File</div>
-            <p class="hint">Image, video, PDF, aur baaki uploaded files ko QR scan ke baad direct open mode me serve kiya jayega. Final display browser ke supported format par depend karega.</p>
+              <div class="panel-title">Upload File</div>
+              <p class="hint">Image, video, PDF, aur baaki uploaded files ko QR scan ke baad direct open mode me serve kiya jayega. Final display browser ke supported format par depend karega.</p>
           </div>
 
           <div class="field-group">
             <label for="fileInput">Choose File</label>
-            <input id="fileInput" class="input" type="file" accept="*/*">
+            <input id="fileInput" class="input" type="file">
           </div>
 
           <div id="dropZone" class="alert info" style="border-style: dashed; padding: 1.2rem; text-align: center; cursor: pointer;">
@@ -671,8 +671,9 @@
           </div>
 
           <div class="field-group">
-            <label for="customNameInput">Optional Custom File Name</label>
-            <input id="customNameInput" class="input" type="text" placeholder="leave blank to keep original file name">
+            <label for="customNameInput">File Name</label>
+            <input id="customNameInput" class="input" type="text" placeholder="LabFlow File">
+            <p class="hint">Default naam developer ne set kiya hai. Client kisi bhi particular file ke liye isko change kar sakta hai.</p>
           </div>
 
           <div class="progress-shell" id="progressShell">
@@ -856,6 +857,9 @@
       config: { ...FIXED_R2_CONFIG },
       lastRenderedDataUrl: ""
     };
+
+    const DEFAULT_UPLOAD_DISPLAY_NAME = "upmines.upsdc.gov.in";
+    const MAX_UPLOAD_DISPLAY_NAME_LENGTH = 80;
 
     const themeToggle = document.getElementById("themeToggle");
     const connectionStatus = document.getElementById("connectionStatus");
@@ -1105,13 +1109,59 @@
       return `${base}/${encodedKey}`;
     }
 
-    function buildObjectKey(fileName) {
-      // Original name ki jagah random unique ID generate kar rahe hain
-      const ext = fileName.includes(".") ? `.${fileName.split(".").pop()}` : "";
+    function getFileExtension(fileName) {
+      const match = String(fileName || "").match(/(\.[^./\\]+)$/);
+      return match ? match[1] : "";
+    }
+
+    function sanitizeFileNamePart(value) {
+      return String(value || "")
+        .trim()
+        .replace(/[\u0000-\u001f\u007f]/g, "")
+        .replace(/[\\/:*?"<>|]+/g, "-")
+        .replace(/\s+/g, " ")
+        .replace(/^\.+/, "")
+        .replace(/\.+$/, "")
+        .trim();
+    }
+
+    function slugifyFileNamePart(value) {
+      const base = sanitizeFileNamePart(value).toLowerCase();
+      const slug = base
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "")
+        .slice(0, 40);
+      return slug || "file";
+    }
+
+    function resolveUploadDisplayName(file, customName) {
+      const source = sanitizeFileNamePart(customName) || DEFAULT_UPLOAD_DISPLAY_NAME;
+      const sourceExt = getFileExtension(source);
+      const fileExt = getFileExtension(file?.name);
+      const ext = sourceExt || fileExt;
+      const base = sourceExt ? source.slice(0, -sourceExt.length) : source;
+      const trimmedBase = base.slice(0, Math.max(1, MAX_UPLOAD_DISPLAY_NAME_LENGTH - ext.length));
+      return `${trimmedBase || DEFAULT_UPLOAD_DISPLAY_NAME}${ext}`;
+    }
+
+    function buildContentDisposition(fileName) {
+      const fallbackName = sanitizeFileNamePart(fileName) || DEFAULT_UPLOAD_DISPLAY_NAME;
+      const quotedName = fallbackName.replace(/["\\\r\n]/g, "_");
+      return `inline; filename="${quotedName}"; filename*=UTF-8''${encodeURIComponent(fallbackName)}`;
+    }
+
+    function buildObjectKey(displayName, originalFileName) {
+      const ext = getFileExtension(displayName) || getFileExtension(originalFileName);
       const randomId = Math.random().toString(36).substring(2, 10) + Math.random().toString(36).substring(2, 10);
-      const key = `file-${randomId}${ext}`;
+      const key = `${slugifyFileNamePart(displayName)}-${randomId}${ext}`;
       const prefix = normalizePrefix(appState.config.prefix);
       return prefix ? `${prefix}/${key}` : key;
+    }
+
+    function normalizeUploadInput() {
+      if (!sanitizeFileNamePart(customNameInput.value)) {
+        customNameInput.value = DEFAULT_UPLOAD_DISPLAY_NAME;
+      }
     }
 
     function formatBytes(bytes) {
@@ -1410,16 +1460,12 @@
       uploadBtn.disabled = true;
 
       try {
-        const customName = customNameInput.value.trim();
-        const rawName = customName || file.name;
-        const ext = rawName.includes(".") ? "" : (file.name.includes(".") ? `.${file.name.split(".").pop()}` : "");
-        const finalName = `${rawName}${ext}`;
-        const key = buildObjectKey(finalName);
-        const contentType = file.type || (finalName.toLowerCase().endsWith(".pdf") ? "application/pdf" : "application/octet-stream");
-        
-        // Browser tab mein original name na dikhe, isliye generic filename set kar rahe hain
-        const genericName = `document${ext}`;
-        const contentDisposition = `inline; filename="${genericName}"`;
+        const finalName = resolveUploadDisplayName(file, customNameInput.value);
+        const key = buildObjectKey(finalName, file.name);
+        const contentType = file.type || (getFileExtension(finalName).toLowerCase() === ".pdf" ? "application/pdf" : "application/octet-stream");
+        const contentDisposition = buildContentDisposition(finalName);
+        const requestedName = sanitizeFileNamePart(customNameInput.value);
+        const displayNameChanged = Boolean(requestedName) && requestedName !== sanitizeFileNamePart(DEFAULT_UPLOAD_DISPLAY_NAME);
 
         setProgress(20, "Preparing upload...");
         const response = await r2Fetch(getObjectApiUrl(key), {
@@ -1434,7 +1480,7 @@
 
         setProgress(100, "Upload complete");
         fileInput.value = "";
-        customNameInput.value = "";
+        customNameInput.value = DEFAULT_UPLOAD_DISPLAY_NAME;
         lastUploadStat.textContent = finalName;
         await refreshFiles();
 
@@ -1443,7 +1489,7 @@
           renderQrForFile(uploaded);
         }
 
-        showToast("File uploaded to R2 and QR generated", "success");
+        showToast(displayNameChanged ? "File uploaded with custom name and QR generated" : "File uploaded with default name and QR generated", "success");
       } catch (error) {
         showToast(error.message || "Upload failed", "error");
       } finally {
@@ -1599,6 +1645,7 @@
       copyBtn.addEventListener("click", copySelectedLink);
       openLinkBtn.addEventListener("click", openSelectedFile);
       downloadPngBtn.addEventListener("click", downloadQrPng);
+      customNameInput.addEventListener("blur", normalizeUploadInput);
       qrSizeInput.addEventListener("input", () => {
         syncQrSizeInput();
         if (appState.selectedFile) {
@@ -1685,6 +1732,7 @@
       }
       initTheme();
       loadFixedConfig();
+      customNameInput.value = DEFAULT_UPLOAD_DISPLAY_NAME;
       syncQrSizeInput();
       initEventListeners();
       resetQrPreview();
